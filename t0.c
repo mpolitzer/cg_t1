@@ -1,25 +1,25 @@
 /**
  *  @file IUPGL.c Simple exemple of use of OpenGL and IUP.
- * 
+ *
  *  Creates a dialog with a tool bar, a canvas and a msg label bar.
- *  It is a simple WIMP program with color assigment for each pixel 
+ *  It is a simple WIMP program with color assigment for each pixel
  *  in the canvas, handling of mouse events and messages.
- *  
- *  Link this program with: 
+ *
+ *  Link this program with:
  *  iup.lib;iupgl.lib;iupimglib.lib;comctl32.lib;opengl32.lib;glu32.lib;
  *
  *  You can find iup libs (iup.lib;iupgl.lib;iupimglib.lib;) at:
  *  http://www.tecgraf.puc-rio.br/iup/
  *  or at:
  *  http://www.tecgraf.puc-rio.br/~mgattass/tec/iup32vc8.zip
- *  the others lib (comctl32.lib;opengl32.lib;glu32.lib;) are inluded in the Visual Studio 
+ *  the others lib (comctl32.lib;opengl32.lib;glu32.lib;) are inluded in the Visual Studio
  *
  *  Do not forget to put the path for the include and lib in the project file.
  *  Here we use: c:\tec\inc and c:\tec\lib
- * 
+ *
  *  Ignore: libcmt.lib;
  *
- *  Last modification:  Marcelo Gattass, 02ago2010,10h. 
+ *  Last modification:  Marcelo Gattass, 02ago2010,10h.
  *
  **/
 /*- Include lib interfaces: ANSI C, IUP and OpenGL ------*/
@@ -102,7 +102,7 @@ int first_cb(void)
 {
 	blue=0;
 	/* print the blue level in the msg bar */
-	IupSetfAttribute(msgbar, "TITLE", "Red [0,1] x Green [0,1] with Blue: %3.2f",blue); 
+	IupSetfAttribute(msgbar, "TITLE", "Red [0,1] x Green [0,1] with Blue: %3.2f",blue);
 	repaint_cb(canvas);   /* repaint with new values of blue */
 	return IUP_DEFAULT;
 }
@@ -112,7 +112,7 @@ int previous_cb(void)
 	blue-=0.1f;
 	if (blue<0.0f) blue=0.0f;
 	/* print the blue level in the msg bar */
-	IupSetfAttribute(msgbar, "TITLE", "Red [0,1] x Green [0,1] with Blue: %3.2f",blue); 
+	IupSetfAttribute(msgbar, "TITLE", "Red [0,1] x Green [0,1] with Blue: %3.2f",blue);
 	repaint_cb(canvas);   /* repaint with new values of blue */
 	return IUP_DEFAULT;
 }
@@ -122,7 +122,7 @@ int next_cb(void)
 	blue+=0.1f;
 	if (blue>1.0f) blue=1.0f;
 	/* print the blue level in the msg bar */
-	IupSetfAttribute(msgbar, "TITLE", "Red [0,1] x Green [0,1] with Blue: %3.2f",blue); 
+	IupSetfAttribute(msgbar, "TITLE", "Red [0,1] x Green [0,1] with Blue: %3.2f",blue);
 	repaint_cb(canvas);   /* repaint with new values of blue */
 	return IUP_DEFAULT;
 }
@@ -131,7 +131,7 @@ int last_cb(void)
 {
 	blue=1;
 	/* print the blue level in the msg bar */
-	IupSetfAttribute(msgbar, "TITLE", "Red [0,1] x Green [0,1] with Blue: %3.2f",blue); 
+	IupSetfAttribute(msgbar, "TITLE", "Red [0,1] x Green [0,1] with Blue: %3.2f",blue);
 	repaint_cb(canvas);   /* repaint with new values of blue */
 	return IUP_DEFAULT;
 }
@@ -139,14 +139,14 @@ int last_cb(void)
 int motion_cb(Ihandle *self, int xm, int ym, char *status){
 	int x=xm;
 	int y=height-ym;
-	IupSetfAttribute(msgbar, "TITLE", "Motion: x = %d, y=%d and status=%s",x,y,status); 
+	IupSetfAttribute(msgbar, "TITLE", "Motion: x = %d, y=%d and status=%s",x,y,status);
 	return IUP_DEFAULT;
 }
 
 int button_cb(Ihandle* self, int button, int pressed, int xm, int ym, char* status){
 	int x=xm;
 	int y=height-ym;
-	IupSetfAttribute(msgbar, "TITLE", "Button: pressed=%d, x=%d, y=%d and status=%s",pressed,x,y,status); 
+	IupSetfAttribute(msgbar, "TITLE", "Button: pressed=%d, x=%d, y=%d and status=%s",pressed,x,y,status);
 	return IUP_DEFAULT;
 }
 
@@ -207,7 +207,7 @@ Ihandle* InitCanvas(void)
 	IupSetAttribute(_canvas, "MOTION_CB","motion_cb");
 
 	/* bind callback actions with callback functions */
-	IupSetFunction("repaint_cb", (Icallback) repaint_cb);  
+	IupSetFunction("repaint_cb", (Icallback) repaint_cb);
 	IupSetFunction("resize_cb", (Icallback) resize_cb);
 	IupSetFunction("button_cb",(Icallback) button_cb);
 	IupSetFunction("motion_cb",(Icallback) motion_cb);
@@ -220,7 +220,7 @@ Ihandle* InitDialog(void)
 	Ihandle* dialog;   /* dialog containing the canvas */
 
 	Ihandle* toolbar=InitToolbar(); /* buttons tool bar */
-	canvas = InitCanvas();          /* canvas to paint with OpenGL */ 
+	canvas = InitCanvas();          /* canvas to paint with OpenGL */
 	msgbar = IupLabel("A msg bar"); /* a msg bar */
 	IupSetAttribute(msgbar,IUP_RASTERSIZE,"640x20");   /* define the size in pixels */
 
@@ -236,7 +236,7 @@ Ihandle* InitDialog(void)
 /*-----------------------*/
 /* Main function.        */
 /*-----------------------*/
-int main(int argc, char* argv[]) 
+int main(int argc, char* argv[])
 {
 	Ihandle* dialog;
 	IupOpen(&argc, &argv);                       /* opens the IUP lib */
@@ -248,5 +248,5 @@ int main(int argc, char* argv[])
 
 	IupMainLoop();                              /* handle the program control to the IUP lib until a return IUP_CLOSE */
 
-	IupClose();                                 /* closes the IUP lib */ 
+	IupClose();                                 /* closes the IUP lib */
 }
