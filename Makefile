@@ -5,7 +5,7 @@ OUT=tmp
 CC=gcc
 RM=rm
 MV=mv
-CFLAGS=-O2 -Wshadow -Wall `pkg-config gl --cflags` -I /usr/include/iup
+CFLAGS=-O2 -Wshadow -Wall `pkg-config gl --cflags` -I /usr/include/iup -ggdb
 LIBS=-l iup -l iupgl -l iupimglib
 
 MAKEFILE=Makefile

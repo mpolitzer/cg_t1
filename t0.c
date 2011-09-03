@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <iup.h>        /* IUP functions*/
 #include <iupgl.h>      /* IUP functions related to OpenGL (IupGLCanvasOpen,IupGLMakeCurrent and IupGLSwapBuffers) */
+#include "image.h"
 
 #ifdef WIN32
 	#include <windows.h>    /* includes only in MSWindows not in UNIX */
@@ -38,10 +39,69 @@
 #endif
 
 /*- Program context: -------------------------------------------------*/
-Ihandle *canvas;                    /* canvas handle */
-Ihandle *msgbar;                    /* message bar  handle */
-int width=640,height=480;           /* width and height of the canvas  */
-float blue=0.3f;                    /* current blue level */
+static Image* cur_img;
+static Image* old_img;
+static Image* sobel_img;
+static Image* high_img;
+
+static int img_idx;
+static Ihandle *canvas;                    /* canvas handle */
+static Ihandle *msgbar;                    /* message bar  handle */
+static int width=640,height=480;           /* width and height of the canvas  */
+
+#define ARRAY_SZ(x) sizeof(x)/sizeof(*x)
+Image *do_highlight(Image *orig, Image *sobel, float threshold)
+{
+	int x,y;
+	float ro,go,bo;
+	float rs,gs,bs;
+	Image *high;
+	high = imgCopy(orig);
+
+	for(y=0; y<imgGetHeight(orig); y++){
+		for(x=0; x<imgGetWidth(orig); x++){
+			imgGetPixel3f(orig, x, y, &ro, &go, &bo);
+			imgGetPixel3f(sobel, x, y, &rs, &gs, &bs);
+
+			rs = ro - threshold*rs;
+			gs = go - threshold*gs;
+			bs = bo - threshold*bs;
+			imgSetPixel3f(high, x, y, rs, gs, bs);
+		}
+	}
+
+	return high;
+}
+
+char * get_file_name( void )
+{
+	Ihandle* getfile = IupFileDlg();
+	char* filename = NULL;
+
+	IupSetAttribute(getfile, IUP_TITLE, "Abertura de arquivo"  );
+	IupSetAttribute(getfile, IUP_DIALOGTYPE, IUP_OPEN);
+	IupSetAttribute(getfile, IUP_FILTER, "*.bmp");
+	IupSetAttribute(getfile, IUP_FILTERINFO, "Arquivo de imagem (*.bmp)");
+	IupPopup(getfile, IUP_CENTER, IUP_CENTER);
+
+	filename = IupGetAttribute(getfile, IUP_VALUE);
+	return filename;
+}
+
+char* get_new_file_name( void )
+{
+	Ihandle* getfile = IupFileDlg();
+	char* filename = NULL;
+
+	IupSetAttribute(getfile, IUP_TITLE, "Salva arquivo"  );
+	IupSetAttribute(getfile, IUP_DIALOGTYPE, IUP_SAVE);
+	IupSetAttribute(getfile, IUP_FILTER, "*.bmp");
+	IupSetAttribute(getfile, IUP_FILTERINFO, "Arquivo de imagem (*.bmp)");
+	IupPopup(getfile, IUP_CENTER, IUP_CENTER);
+
+	filename = IupGetAttribute(getfile, IUP_VALUE);
+	return filename;
+}
 
 /*------------------------------------------*/
 /* IUP Callbacks                            */
@@ -56,12 +116,14 @@ int repaint_cb(Ihandle *self)
 	glClear(GL_COLOR_BUFFER_BIT);          /* clear the color buffer */
 
 	/* assing to each pixel of the canvas a red-green color in a given blue value (global variable) */
+	if (!cur_img) return IUP_DEFAULT;
+
 	glBegin(GL_POINTS);
-	for (y=0;y<height;y++) {
-		for (x=0; x<width; x++) {
-			float red = ((float)x)/width;
-			float green = ((float)y)/height;
-			glColor3f(red,green,blue);        /* define a current color */
+	for (y=0; y < imgGetHeight(cur_img); y++) {
+		for (x=0; x < imgGetWidth(cur_img); x++) {
+			float r,g,b;
+			imgGetPixel3f(cur_img, x, y, &r, &g, &b);
+			glColor3f(r,g,b);        /* define a current color */
 			glVertex2i(x,y);                  /* paint a point in the position (x,y,0) */
 		}
 	}
@@ -98,55 +160,43 @@ int resize_cb(Ihandle *self, int new_width, int new_height)
 	return IUP_DEFAULT; /* return to the IUP main loop */
 }
 
-int first_cb(void)
+int open_file_cb(void)
 {
-	blue=0;
-	/* print the blue level in the msg bar */
-	IupSetfAttribute(msgbar, "TITLE", "Red [0,1] x Green [0,1] with Blue: %3.2f",blue);
+	char *fname = get_file_name();
+	if (!fname) /*TODO show dialog de erro. */
+		printf ("invalid file name: %s\n", fname);
+	old_img = imgReadBMP(fname);
+	// sobel_img = cur_img = do_sobel(old_img);
+	sobel_img = cur_img = imgEdges(old_img);
+	high_img = do_highlight(old_img, sobel_img, 0.1);
+	resize_cb(canvas, imgGetWidth(cur_img), imgGetHeight(cur_img));
 	repaint_cb(canvas);   /* repaint with new values of blue */
 	return IUP_DEFAULT;
 }
 
-int previous_cb(void)
+int toggle_cb(Ihandle *ih, int state)
 {
-	blue-=0.1f;
-	if (blue<0.0f) blue=0.0f;
-	/* print the blue level in the msg bar */
-	IupSetfAttribute(msgbar, "TITLE", "Red [0,1] x Green [0,1] with Blue: %3.2f",blue);
-	repaint_cb(canvas);   /* repaint with new values of blue */
-	return IUP_DEFAULT;
-}
+	if (cur_img == high_img) cur_img = sobel_img;
+	else cur_img = high_img;
 
-int next_cb(void)
-{
-	blue+=0.1f;
-	if (blue>1.0f) blue=1.0f;
-	/* print the blue level in the msg bar */
-	IupSetfAttribute(msgbar, "TITLE", "Red [0,1] x Green [0,1] with Blue: %3.2f",blue);
-	repaint_cb(canvas);   /* repaint with new values of blue */
-	return IUP_DEFAULT;
-}
-
-int last_cb(void)
-{
-	blue=1;
-	/* print the blue level in the msg bar */
-	IupSetfAttribute(msgbar, "TITLE", "Red [0,1] x Green [0,1] with Blue: %3.2f",blue);
-	repaint_cb(canvas);   /* repaint with new values of blue */
+	printf ("%p\n", cur_img);
+	repaint_cb(canvas);
 	return IUP_DEFAULT;
 }
 
 int motion_cb(Ihandle *self, int xm, int ym, char *status){
 	int x=xm;
 	int y=height-ym;
-	IupSetfAttribute(msgbar, "TITLE", "Motion: x = %d, y=%d and status=%s",x,y,status);
+	IupSetfAttribute(msgbar, "TITLE", "Motion: x = %d, y=%d - %s",x,y,
+			cur_img == sobel_img ? "old" : "cur");
 	return IUP_DEFAULT;
 }
 
 int button_cb(Ihandle* self, int button, int pressed, int xm, int ym, char* status){
 	int x=xm;
 	int y=height-ym;
-	IupSetfAttribute(msgbar, "TITLE", "Button: pressed=%d, x=%d, y=%d and status=%s",pressed,x,y,status);
+	IupSetfAttribute(msgbar, "TITLE", "pressed=%d, x=%d, y=%d, status=%s",
+			pressed, x, y, status);
 	return IUP_DEFAULT;
 }
 
@@ -154,7 +204,10 @@ int button_cb(Ihandle* self, int button, int pressed, int xm, int ym, char* stat
 int exit_cb(void)
 {
 	printf("Function to free memory and do finalizations...\n");
+	imgDestroy(sobel_img);
+	imgDestroy(old_img);
 
+	old_img = sobel_img = cur_img = NULL;
 	return IUP_CLOSE;
 }
 
@@ -168,30 +221,20 @@ Ihandle* InitToolbar(void)
 	Ihandle* toolbar;
 
 	/* Create four buttons */
-	Ihandle* first = IupButton("first", "first_action");
-	Ihandle* previous = IupButton("previous", "previous_action");
-	Ihandle* next = IupButton("next", "next_action");
-	Ihandle* last = IupButton("last", "last_action");
+	Ihandle* open_file = IupButton("open", "open_file_action");
+	Ihandle* toggle_img = IupButton("toggle", "toggle_img_action");
 
 	/* Associate images with this buttons */
-	IupSetAttribute(first,"IMAGE","IUP_MediaGotoBegin");
-	IupSetAttribute(previous,"IMAGE","IUP_MediaReverse");
-	IupSetAttribute(next,"IMAGE","IUP_MediaPlay");
-	IupSetAttribute(last,"IMAGE","IUP_MediaGoToEnd");
+	IupSetAttribute(open_file,"IMAGE","IUP_FileOpen");
 
 	/* Associate tip's (text that appear when the mouse is over) */
-	IupSetAttribute(first,"TIP","go to first");
-	IupSetAttribute(previous,"TIP","previous");
-	IupSetAttribute(next,"TIP","next");
-	IupSetAttribute(last,"TIP","go to last");
+	IupSetAttribute(open_file,"TIP","go to open_file");
 
 	/* Associate function callbacks to the button actions */
-	IupSetFunction("first_action", (Icallback)first_cb);
-	IupSetFunction("previous_action", (Icallback)previous_cb);
-	IupSetFunction("next_action", (Icallback)next_cb);
-	IupSetFunction("last_action", (Icallback)last_cb);
+	IupSetFunction("open_file_action", (Icallback)open_file_cb);
+	IupSetFunction("toggle_img_action", (Icallback)toggle_cb);
 
-	toolbar=IupHbox(first,previous,next,last, IupFill(),NULL);
+	toolbar=IupHbox(open_file, toggle_img, IupFill(),NULL);
 
 	return toolbar;
 }
@@ -239,14 +282,14 @@ Ihandle* InitDialog(void)
 int main(int argc, char* argv[])
 {
 	Ihandle* dialog;
-	IupOpen(&argc, &argv);                       /* opens the IUP lib */
-	IupImageLibOpen();                          /* enable iup_image manipulation (for buttons) */
-	IupGLCanvasOpen();                          /* enable the use of OpenGL to draw in canvas */
+	IupOpen(&argc, &argv);
+	IupImageLibOpen();
+	IupGLCanvasOpen();
 
-	dialog = InitDialog();                      /* local function to create a dialog with buttons and canvas */
-	IupShowXY(dialog, IUP_CENTER, IUP_CENTER);  /* shows dialog in the center of screen */
+	dialog = InitDialog();
+	IupShowXY(dialog, IUP_CENTER, IUP_CENTER);
 
-	IupMainLoop();                              /* handle the program control to the IUP lib until a return IUP_CLOSE */
-
-	IupClose();                                 /* closes the IUP lib */
+	IupMainLoop();
+	IupClose();
+	return 0;
 }
