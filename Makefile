@@ -1,4 +1,4 @@
-SRC=t0.c image.c
+SRC=main.c image.c
 OUT=tmp
 
 # Configs

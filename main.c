@@ -40,16 +40,17 @@
 
 /*- Program context: -------------------------------------------------*/
 static Image* cur_img;
+static Image* orig_img;
+static Image* myeffect_img;
 static Image* old_img;
 static Image* sobel_img;
 static Image* high_img;
 
-static int img_idx;
 static Ihandle *canvas;                    /* canvas handle */
 static Ihandle *msgbar;                    /* message bar  handle */
 static int width=640,height=480;           /* width and height of the canvas  */
 
-#define ARRAY_SZ(x) sizeof(x)/sizeof(*x)
+#define ARRAY_SIZE(x) (sizeof(x)/sizeof(*x))
 Image *do_highlight(Image *orig, Image *sobel, float threshold)
 {
 	int x,y;
@@ -71,6 +72,52 @@ Image *do_highlight(Image *orig, Image *sobel, float threshold)
 	}
 
 	return high;
+}
+
+Image *do_myeffect(Image *orig)
+{
+	int x,y,z;
+	Image *high;
+	high = imgCopy(orig);
+	int remap[][2] = {
+		{-1, -1},	{ 0, -1},	{ 1, -1},
+		{-1,  0},	{ 0,  0},	{ 1,  0},
+		{-1,  1},	{ 0,  1},	{ 1,  1},
+	};
+
+	for(y=1; y<imgGetHeight(orig)-1; y+=3){
+		for(x=1; x<imgGetWidth(orig)-1; x+=3){
+			float ro = 0,go = 0,bo = 0;
+			float rs = 0,gs = 0,bs = 0;
+
+			for(z=0; z<ARRAY_SIZE(remap); z++){
+				imgGetPixel3f(orig, x+remap[z][0],
+						y+remap[z][1],
+						&ro, &go, &bo);
+				rs += ro;
+				gs += go;
+				bs += bo;
+			}
+			rs = rs/ARRAY_SIZE(remap);
+			gs = gs/ARRAY_SIZE(remap);
+			bs = bs/ARRAY_SIZE(remap);
+
+			for(z=0; z<ARRAY_SIZE(remap); z++)
+				imgSetPixel3f(high, x+remap[z][0],
+						y+remap[z][1],
+						rs, gs, bs);
+		}
+	}
+	return high;
+}
+
+void update_dialog_size(Ihandle* dialog, Ihandle* canvas, int w, int h )
+{
+	char buffer[64];
+	sprintf(buffer,"%dx%d",w,h);
+	IupSetAttribute(canvas, IUP_RASTERSIZE, buffer);
+	IupSetAttribute(dialog, IUP_RASTERSIZE, NULL);
+	IupShowXY(dialog, IUP_CENTER, IUP_CENTER);
 }
 
 char * get_file_name( void )
@@ -165,24 +212,64 @@ int open_file_cb(void)
 	char *fname = get_file_name();
 	if (!fname) /*TODO show dialog de erro. */
 		printf ("invalid file name: %s\n", fname);
-	old_img = imgReadBMP(fname);
-	// sobel_img = cur_img = do_sobel(old_img);
-	sobel_img = cur_img = imgEdges(old_img);
-	high_img = do_highlight(old_img, sobel_img, 0.1);
+	orig_img = imgReadBMP(fname);
+
+	sobel_img = cur_img = imgEdges(orig_img);
+	high_img = do_highlight(orig_img, sobel_img, 0.1);
+	myeffect_img = do_myeffect(orig_img);
 	resize_cb(canvas, imgGetWidth(cur_img), imgGetHeight(cur_img));
 	repaint_cb(canvas);   /* repaint with new values of blue */
 	return IUP_DEFAULT;
 }
 
-int toggle_cb(Ihandle *ih, int state)
+int save_file_cb(void)
 {
-	if (cur_img == high_img) cur_img = sobel_img;
-	else cur_img = high_img;
+	char *fname = get_new_file_name();
+	if (!fname) /*TODO show dialog de erro. */
+		printf ("invalid file name: %s\n", fname);
+
+	imgWriteBMP(fname, cur_img);
+
+	return IUP_DEFAULT;
+}
+
+int show_orig_cb(Ihandle *ih, int state)
+{
+	cur_img = orig_img;
 
 	printf ("%p\n", cur_img);
 	repaint_cb(canvas);
 	return IUP_DEFAULT;
 }
+
+int highlight_cb(Ihandle *ih, int state)
+{
+	cur_img = high_img;
+
+	printf ("%p\n", cur_img);
+	repaint_cb(canvas);
+	return IUP_DEFAULT;
+}
+
+
+int sobel_cb(Ihandle *ih, int state)
+{
+	cur_img = sobel_img;
+
+	printf ("%p\n", cur_img);
+	repaint_cb(canvas);
+	return IUP_DEFAULT;
+}
+
+int myeffect_cb(Ihandle *ih, int state)
+{
+	cur_img = myeffect_img;
+
+	printf ("%p\n", cur_img);
+	repaint_cb(canvas);
+	return IUP_DEFAULT;
+}
+
 
 int motion_cb(Ihandle *self, int xm, int ym, char *status){
 	int x=xm;
@@ -207,7 +294,7 @@ int exit_cb(void)
 	imgDestroy(sobel_img);
 	imgDestroy(old_img);
 
-	old_img = sobel_img = cur_img = NULL;
+	sobel_img = cur_img = NULL;
 	return IUP_CLOSE;
 }
 
@@ -221,20 +308,30 @@ Ihandle* InitToolbar(void)
 	Ihandle* toolbar;
 
 	/* Create four buttons */
-	Ihandle* open_file = IupButton("open", "open_file_action");
-	Ihandle* toggle_img = IupButton("toggle", "toggle_img_action");
+	Ihandle* hopen_file = IupButton("open", "open_file_action");
+	Ihandle* hsave_file = IupButton("save", "save_file_action");
+	Ihandle* hhighlight_img = IupButton("highlight", "highlight_img_action");
+	Ihandle* horig_img = IupButton("orig", "orig_img_action");
+	Ihandle* hsobel_img = IupButton("sobel", "sobel_img_action");
+	Ihandle* hmyeffect_img = IupButton("myeffect", "myeffect_img_action");
 
 	/* Associate images with this buttons */
-	IupSetAttribute(open_file,"IMAGE","IUP_FileOpen");
+	IupSetAttribute(hopen_file,"IMAGE","IUP_FileOpen");
+	IupSetAttribute(hsave_file,"IMAGE","IUP_FileSave");
 
 	/* Associate tip's (text that appear when the mouse is over) */
-	IupSetAttribute(open_file,"TIP","go to open_file");
+	IupSetAttribute(hopen_file,"TIP","go to open_file");
 
 	/* Associate function callbacks to the button actions */
 	IupSetFunction("open_file_action", (Icallback)open_file_cb);
-	IupSetFunction("toggle_img_action", (Icallback)toggle_cb);
+	IupSetFunction("save_file_action", (Icallback)save_file_cb);
+	IupSetFunction("highlight_img_action", (Icallback)highlight_cb);
+	IupSetFunction("orig_img_action", (Icallback)show_orig_cb);
+	IupSetFunction("sobel_img_action", (Icallback)sobel_cb);
+	IupSetFunction("myeffect_img_action", (Icallback)myeffect_cb);
 
-	toolbar=IupHbox(open_file, toggle_img, IupFill(),NULL);
+	toolbar=IupHbox(hopen_file, hsave_file, hhighlight_img, horig_img,
+			hsobel_img, hmyeffect_img, IupFill(),NULL);
 
 	return toolbar;
 }
