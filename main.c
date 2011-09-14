@@ -22,6 +22,7 @@
  *  Last modification:  Marcelo Gattass, 02ago2010,10h.
  *
  **/
+
 /*- Include lib interfaces: ANSI C, IUP and OpenGL ------*/
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,31 +43,52 @@
 static Image* cur_img;
 static Image* orig_img;
 static Image* myeffect_img;
-static Image* old_img;
 static Image* sobel_img;
 static Image* high_img;
+static Image* grey_img;
+static Image* gauss_img;
+static Image* median_img;
+static Image* reduce_img;
+static Image* otsu_img;
+static Image* ohbuchi_img;
 
+static Ihandle* dialog;
 static Ihandle *canvas;                    /* canvas handle */
 static Ihandle *msgbar;                    /* message bar  handle */
 static int width=640,height=480;           /* width and height of the canvas  */
 
+int param_action(Ihandle *_dialog, int param_index, void *user_data)
+{
+	return IUP_DEFAULT; /* returns the control to the main loop */
+}
+
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(*x))
-Image *do_highlight(Image *orig, Image *sobel, float threshold)
+Image *do_highlight(Image *orig, Image *sobel)
 {
 	int x,y;
+	float th = 0;
 	float ro,go,bo;
 	float rs,gs,bs;
 	Image *high;
 	high = imgCopy(orig);
+
+	if (!IupGetParam("set threshold", param_action, 0,
+				"threshold: %r\n", &th, NULL))
+		th = 0.1;
 
 	for(y=0; y<imgGetHeight(orig); y++){
 		for(x=0; x<imgGetWidth(orig); x++){
 			imgGetPixel3f(orig, x, y, &ro, &go, &bo);
 			imgGetPixel3f(sobel, x, y, &rs, &gs, &bs);
 
-			rs = ro - threshold*rs;
-			gs = go - threshold*gs;
-			bs = bo - threshold*bs;
+			rs = ro - th*rs;
+			gs = go - th*gs;
+			bs = bo - th*bs;
+			/* clipping img */
+			if (rs < 0) rs = 0; if (rs > 1) rs = 1;
+			if (gs < 0) gs = 0; if (gs > 1) rs = 1;
+			if (bs < 0) bs = 0; if (bs > 1) rs = 1;
+
 			imgSetPixel3f(high, x, y, rs, gs, bs);
 		}
 	}
@@ -111,13 +133,13 @@ Image *do_myeffect(Image *orig)
 	return high;
 }
 
-void update_dialog_size(Ihandle* dialog, Ihandle* canvas, int w, int h )
+void update_dialog_size(Ihandle* _dialog, Ihandle* _canvas, int w, int h )
 {
 	char buffer[64];
 	sprintf(buffer,"%dx%d",w,h);
-	IupSetAttribute(canvas, IUP_RASTERSIZE, buffer);
-	IupSetAttribute(dialog, IUP_RASTERSIZE, NULL);
-	IupShowXY(dialog, IUP_CENTER, IUP_CENTER);
+	IupSetAttribute(_canvas, IUP_RASTERSIZE, buffer);
+	IupSetAttribute(_dialog, IUP_RASTERSIZE, NULL);
+	IupShowXY(_dialog, IUP_CENTER, IUP_CENTER);
 }
 
 char * get_file_name( void )
@@ -212,13 +234,23 @@ int open_file_cb(void)
 	char *fname = get_file_name();
 	if (!fname) /*TODO show dialog de erro. */
 		printf ("invalid file name: %s\n", fname);
-	orig_img = imgReadBMP(fname);
 
-	sobel_img = cur_img = imgEdges(orig_img);
-	high_img = do_highlight(orig_img, sobel_img, 0.1);
+	cur_img = orig_img = imgReadBMP(fname);
+	update_dialog_size(dialog, canvas, imgGetWidth(orig_img), imgGetHeight(orig_img));
+
+	sobel_img = imgEdges(orig_img);
 	myeffect_img = do_myeffect(orig_img);
+	grey_img = imgGrey(orig_img);
+	gauss_img = imgCopy(orig_img);
+	imgGauss(gauss_img, orig_img);
+	median_img = imgCopy(orig_img);
+	imgMedian(median_img);
+	reduce_img = imgCopy(orig_img);
+	imgReduceColors(orig_img, reduce_img, 255);
+	otsu_img = imgBinOtsu(orig_img);
+	ohbuchi_img = imgBinOhbuchi(orig_img);
 	resize_cb(canvas, imgGetWidth(cur_img), imgGetHeight(cur_img));
-	repaint_cb(canvas);   /* repaint with new values of blue */
+	repaint_cb(canvas);
 	return IUP_DEFAULT;
 }
 
@@ -237,16 +269,16 @@ int show_orig_cb(Ihandle *ih, int state)
 {
 	cur_img = orig_img;
 
-	printf ("%p\n", cur_img);
 	repaint_cb(canvas);
 	return IUP_DEFAULT;
 }
 
 int highlight_cb(Ihandle *ih, int state)
 {
+	imgDestroy(high_img);
+	high_img = do_highlight(orig_img, sobel_img);
 	cur_img = high_img;
 
-	printf ("%p\n", cur_img);
 	repaint_cb(canvas);
 	return IUP_DEFAULT;
 }
@@ -256,7 +288,6 @@ int sobel_cb(Ihandle *ih, int state)
 {
 	cur_img = sobel_img;
 
-	printf ("%p\n", cur_img);
 	repaint_cb(canvas);
 	return IUP_DEFAULT;
 }
@@ -265,17 +296,73 @@ int myeffect_cb(Ihandle *ih, int state)
 {
 	cur_img = myeffect_img;
 
-	printf ("%p\n", cur_img);
 	repaint_cb(canvas);
 	return IUP_DEFAULT;
 }
 
 
+int  grey_cb(Ihandle *ih, int state)
+{
+	cur_img = grey_img;
+
+	repaint_cb(canvas);
+	return IUP_DEFAULT;
+}
+
+int  gauss_cb(Ihandle *ih, int state)
+{
+	cur_img = gauss_img;
+
+	repaint_cb(canvas);
+	return IUP_DEFAULT;
+}
+
+int  median_cb(Ihandle *ih, int state)
+{
+	cur_img = median_img;
+
+	repaint_cb(canvas);
+	return IUP_DEFAULT;
+}
+
+int  reduce_cb(Ihandle *ih, int state)
+{
+	int num;
+	imgDestroy(reduce_img);
+	
+	if (!IupGetParam("set number of colors", param_action, 0,
+				"Number of colors: %i\n", &num, NULL))
+		num = 255;
+
+	reduce_img = imgCopy(orig_img);
+	imgReduceColors(orig_img, reduce_img, num);
+	
+	cur_img = reduce_img;
+
+	repaint_cb(canvas);
+	return IUP_DEFAULT;
+}
+
+int  otsu_cb(Ihandle *ih, int state)
+{
+	cur_img = otsu_img;
+
+	repaint_cb(canvas);
+	return IUP_DEFAULT;
+}
+
+int  ohbuchi_cb(Ihandle *ih, int state)
+{
+	cur_img = ohbuchi_img;
+
+	repaint_cb(canvas);
+	return IUP_DEFAULT;
+}
+
 int motion_cb(Ihandle *self, int xm, int ym, char *status){
 	int x=xm;
 	int y=height-ym;
-	IupSetfAttribute(msgbar, "TITLE", "Motion: x = %d, y=%d - %s",x,y,
-			cur_img == sobel_img ? "old" : "cur");
+	IupSetfAttribute(msgbar, "TITLE", "Motion: x = %d, y=%d",x,y);
 	return IUP_DEFAULT;
 }
 
@@ -292,7 +379,6 @@ int exit_cb(void)
 {
 	printf("Function to free memory and do finalizations...\n");
 	imgDestroy(sobel_img);
-	imgDestroy(old_img);
 
 	sobel_img = cur_img = NULL;
 	return IUP_CLOSE;
@@ -308,12 +394,18 @@ Ihandle* InitToolbar(void)
 	Ihandle* toolbar;
 
 	/* Create four buttons */
-	Ihandle* hopen_file = IupButton("open", "open_file_action");
-	Ihandle* hsave_file = IupButton("save", "save_file_action");
-	Ihandle* hhighlight_img = IupButton("highlight", "highlight_img_action");
-	Ihandle* horig_img = IupButton("orig", "orig_img_action");
-	Ihandle* hsobel_img = IupButton("sobel", "sobel_img_action");
-	Ihandle* hmyeffect_img = IupButton("myeffect", "myeffect_img_action");
+	Ihandle* hopen_file = IupButton("Open", "open_file_action");
+	Ihandle* hsave_file = IupButton("Save", "save_file_action");
+	Ihandle* hhighlight_img = IupButton("Highlight", "highlight_img_action");
+	Ihandle* horig_img = IupButton("Original", "orig_img_action");
+	Ihandle* hsobel_img = IupButton("Sobel", "sobel_img_action");
+	Ihandle* hmyeffect_img = IupButton("Pixelize", "myeffect_img_action");
+	Ihandle* hgrey_img = IupButton("Grey", "grey_img_action");
+	Ihandle* hgauss_img = IupButton("Gauss", "gauss_img_action");
+	Ihandle* hmedian_img = IupButton("Median", "median_img_action");
+	Ihandle* hreduce_img = IupButton("Reduce", "reduce_img_action");
+	Ihandle* hotsu_img = IupButton("Otsu", "otsu_img_action");
+	Ihandle* hohbuchi_img = IupButton("Ohbuchi", "ohbuchi_img_action");
 
 	/* Associate images with this buttons */
 	IupSetAttribute(hopen_file,"IMAGE","IUP_FileOpen");
@@ -329,9 +421,17 @@ Ihandle* InitToolbar(void)
 	IupSetFunction("orig_img_action", (Icallback)show_orig_cb);
 	IupSetFunction("sobel_img_action", (Icallback)sobel_cb);
 	IupSetFunction("myeffect_img_action", (Icallback)myeffect_cb);
+	IupSetFunction("grey_img_action", (Icallback)grey_cb);
+	IupSetFunction("gauss_img_action", (Icallback)gauss_cb);
+	IupSetFunction("median_img_action", (Icallback)median_cb);
+	IupSetFunction("reduce_img_action", (Icallback)reduce_cb);
+	IupSetFunction("otsu_img_action", (Icallback)otsu_cb);
+	IupSetFunction("ohbuchi_img_action", (Icallback)ohbuchi_cb);
 
-	toolbar=IupHbox(hopen_file, hsave_file, hhighlight_img, horig_img,
-			hsobel_img, hmyeffect_img, IupFill(),NULL);
+	toolbar=IupHbox(hopen_file, hsave_file, horig_img, hhighlight_img,
+			hsobel_img, hmyeffect_img, hgrey_img, hgauss_img,
+			hmedian_img, hreduce_img, hotsu_img,
+			hohbuchi_img, IupFill(),NULL);
 
 	return toolbar;
 }
@@ -357,7 +457,7 @@ Ihandle* InitCanvas(void)
 
 Ihandle* InitDialog(void)
 {
-	Ihandle* dialog;   /* dialog containing the canvas */
+	Ihandle* _dialog;   /* dialog containing the canvas */
 
 	Ihandle* toolbar=InitToolbar(); /* buttons tool bar */
 	canvas = InitCanvas();          /* canvas to paint with OpenGL */
@@ -365,12 +465,12 @@ Ihandle* InitDialog(void)
 	IupSetAttribute(msgbar,IUP_RASTERSIZE,"640x20");   /* define the size in pixels */
 
 	/* create the dialog and set its attributes */
-	dialog = IupDialog(IupVbox(toolbar,canvas,msgbar,NULL));
-	IupSetAttribute(dialog, "TITLE", "IUP_OpenGL");
-	IupSetAttribute(dialog, "CLOSE_CB", "exit_cb");
+	_dialog = IupDialog(IupVbox(toolbar,canvas,msgbar,NULL));
+	IupSetAttribute(_dialog, "TITLE", "T1 - Marcelo e Peter");
+	IupSetAttribute(_dialog, "CLOSE_CB", "exit_cb");
 	IupSetFunction("exit_cb", (Icallback) exit_cb);
 
-	return dialog;
+	return _dialog;
 }
 
 /*-----------------------*/
@@ -378,7 +478,6 @@ Ihandle* InitDialog(void)
 /*-----------------------*/
 int main(int argc, char* argv[])
 {
-	Ihandle* dialog;
 	IupOpen(&argc, &argv);
 	IupImageLibOpen();
 	IupGLCanvasOpen();
